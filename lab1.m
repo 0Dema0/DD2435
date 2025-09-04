@@ -104,9 +104,6 @@ legend; grid on;
 
 
 %% 4: A spherical membrane compartment
-
-% in the following we are assuming that the injected current is 0
-
 % task 6
 I_d_s = -GHK_current(R, F, T, v_m, IonTable); % Current density, in A/m^2
 I_d_s_table = table(I_d_s*1e4, 'RowNames', IonTable.Properties.RowNames, ...
@@ -138,34 +135,100 @@ disp(['Total conductance of neuron soma membrane at V = -50 mV: ' num2str(G_m, '
 dt = 0.1e-3;
 t_max = 50e-3;
 time = 0:dt:t_max;
-V_m = zeros(size(time));
-V_m(1) = -50e-3;
+V_m = zeros(2, length(time));
+I_inj = zeros(2, length(time));
+V_m(:,1) = -50e-3;
 
 for i = 1:length(time)-1
-    I_s = -GHK_current(R,F,T,V_m(i),IonTable);
-    I_s_m = sum(I_s);
+    for trace = 1:2
+        I_s = -GHK_current(R, F, T, V_m(trace,i), IonTable);
+        I_s_m = sum(I_s);
 
-    I_inj = 0;
+        if trace == 2
+            if (i >= length(time)/5) && (i < length(time)/3)
+                I_inj(trace,i) = 0.05;
+            else
+                I_inj(trace,i) = 0;
+            end
+        end
 
-    % if i < length(time)/3
-    %     I_inj = 0.05;
-    % else
-    %     I_inj = 0;
-    % end
-
-    % Euler forward
-    V_m(i+1) = V_m(i) + (I_inj + I_s_m)/c_m * dt;
+        % Euler forward
+        V_m(trace,i+1) = V_m(trace,i) + (I_inj(trace,i) + I_s_m)/c_m * dt;
+    end
 end
 
-figure;
-plot(time*1e3, V_m*1e3);
-xlabel('Time [ms]');
-ylabel('Membrane potential [mV]');
-title('V_m course for soma');
+for trace = 1:2
+    figure;
+    % Injected current
+    subplot(2,1,1);
+    plot(time*1e3, I_inj(trace,:)*1e3);
+    xlabel('Time [ms]');
+    ylabel('Injected current [mA]');
+    ylim([-5,55]);
+    title('I_{inj} vs time');
+
+    subplot(2,1,2);
+    plot(time*1e3, V_m(trace,:)*1e3);
+    xlabel('Time [ms]');
+    ylabel('Membrane potential [mV]');
+    title('V_m vs time');
+
+    if trace == 1
+        sgtitle('Plots of I_{inj}(t) = 0 and V_m(t) vs Time (Soma)');
+    else
+        sgtitle('Plots of I_{inj}(t) ≠ 0 and V_m(t) vs Time (Soma)');
+    end
+end
 
 % Task 9:
+V_all = {V_m_1, V_m_2};
+I_all = {I_inj_1, I_inj_2};
+tau_m = zeros(1,2);
+V_37 = zeros(1,2);
+idx_max = zeros(1,2);
+idx_37 = zeros(1,2);
 
-% Near 7.4 ms
+for trace = 1:2
+    V = V_all{trace};
+    [maxV, idx] = max(V);
+    idx_max(trace) = idx;
+    V_37(trace) = (maxV - V_rest) * 0.37;
+    [~, local_idx] = min(abs(V(idx:end) - (V_rest + V_37(trace))));
+    idx_37(trace) = local_idx + idx - 1;
+    tau_m(trace) = time(idx_37(trace)) - time(idx);
+end
+
+for trace = 1:2
+    figure;
+    
+    subplot(2,1,1);
+    plot(time*1e3, I_all{trace}*1e3);
+    xlabel('Time [ms]');
+    ylabel('Injected current [mA]');
+    ylim([-5,55]);
+    title('I_{inj} vs time');
+    
+    subplot(2,1,2);
+    plot(time*1e3, V_all{trace}*1e3);
+    yline((V_rest + V_37(trace))*1e3, '--g', ...
+        ['V_{37%} = ' num2str((V_rest + V_37(trace))*1e3,'%.2f') ' mV']);
+    xline(time(idx_max(trace))*1e3, '--r', ...
+        ['t_0 = ' num2str(time(idx_max(trace))*1e3,'%.2f') ' ms'], ...
+        'LabelOrientation', 'horizontal');
+    xline(time(idx_37(trace))*1e3, '--r', ...
+        ['t_m = ' num2str(time(idx_37(trace))*1e3,'%.2f') ' ms'], ...
+        'LabelOrientation', 'horizontal');
+    xlabel('Time [ms]');
+    ylabel('Membrane potential [mV]');
+    title(['V_m vs time: \tau_m = t_m - t_0 = ' num2str(tau_m(trace)*1e3,'%.2f') 'ms']);
+    
+    if trace == 1
+        sgtitle('Plots of I_{inj}(t) = 0 and V_m(t) vs Time with \tau_m and V_{37%} (Soma)');
+    else
+        sgtitle('Plots of I_{inj}(t) ≠ 0 and V_m(t) vs Time with \tau_m and V_{37%} (Soma)');
+    end
+end
+
 
 % Task 10:
 dt = 0.1e-3;
@@ -195,11 +258,7 @@ for i = 1:length(time)-1
     I_s = -GHK_current(R,F,T,V_m(i),IonTable_temp);
     I_s_m = sum(I_s);
 
-    if i < length(time)/3
-        I_inj = 0.05;
-    else
-        I_inj = 0;
-    end
+    I_inj = 0;
 
     % Euler forward
     V_m(i+1) = V_m(i) + (I_inj + I_s_m)/c_m * dt;
@@ -209,4 +268,17 @@ figure;
 plot(time*1e3, V_m*1e3);
 xlabel('Time [ms]');
 ylabel('Membrane potential [mV]');
-title('V_m course for soma with changing ion permeabilities');
+title('V_m course for soma with changing ion permeabilities (I_{inj} = 0)');
+
+%Task 11:
+A_d = 4*pi*(d_d/2)^2; % Area of soma membrane, in m^2
+I_d = I_d_s * A_d; % Current, in A
+I_d_table = table(I_d, 'RowNames', IonTable.Properties.RowNames, ...
+    'VariableNames', {'Current in A'});
+disp('Ionic currents through neuron dendritic spine head membrane at V = -50 mV:');
+disp(I_d_table);
+I_d_tot = sum(I_d); % Current, in A
+disp(['Total current through neuron dendritic spine head membrane at V = -50 mV: ' num2str(I_d_tot, '%.2e') ' A']);
+
+%% 5: Stochastic, voltage dependent ion channels
+%Task 12:
