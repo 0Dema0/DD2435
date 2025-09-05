@@ -19,7 +19,6 @@ t_m = 100; % Membrane thickness, in Angstrom
 c_m = 1e-2; % Membrane specific capacitance, in F/m^2
 v_m = -50*1e-3; % Membrane potential, in V
 
-
 %% 3: GHK equation
 % Task 1:
 V_rest = GHK_voltage(R, F, T, IonTable); % Potential, in V
@@ -181,15 +180,13 @@ for trace = 1:2
 end
 
 % Task 9:
-V_all = {V_m_1, V_m_2};
-I_all = {I_inj_1, I_inj_2};
 tau_m = zeros(1,2);
 V_37 = zeros(1,2);
 idx_max = zeros(1,2);
 idx_37 = zeros(1,2);
 
 for trace = 1:2
-    V = V_all{trace};
+    V = V_m(trace,:);
     [maxV, idx] = max(V);
     idx_max(trace) = idx;
     V_37(trace) = (maxV - V_rest) * 0.37;
@@ -202,15 +199,15 @@ for trace = 1:2
     figure;
     
     subplot(2,1,1);
-    plot(time*1e3, I_all{trace}*1e3);
+    plot(time*1e3, I_inj(trace,:)*1e3);
     xlabel('Time [ms]');
     ylabel('Injected current [mA]');
     ylim([-5,55]);
     title('I_{inj} vs time');
     
     subplot(2,1,2);
-    plot(time*1e3, V_all{trace}*1e3);
-    yline((V_rest + V_37(trace))*1e3, '--g', ...
+    plot(time*1e3, V_m(trace,:)*1e3);
+    yline((V_rest + V_37(trace))*1e3, '--k', ...
         ['V_{37%} = ' num2str((V_rest + V_37(trace))*1e3,'%.2f') ' mV']);
     xline(time(idx_max(trace))*1e3, '--r', ...
         ['t_0 = ' num2str(time(idx_max(trace))*1e3,'%.2f') ' ms'], ...
@@ -270,7 +267,7 @@ xlabel('Time [ms]');
 ylabel('Membrane potential [mV]');
 title('V_m course for soma with changing ion permeabilities (I_{inj} = 0)');
 
-%Task 11:
+% Task 11:
 A_d = 4*pi*(d_d/2)^2; % Area of soma membrane, in m^2
 I_d = I_d_s * A_d; % Current, in A
 I_d_table = table(I_d, 'RowNames', IonTable.Properties.RowNames, ...
@@ -281,4 +278,248 @@ I_d_tot = sum(I_d); % Current, in A
 disp(['Total current through neuron dendritic spine head membrane at V = -50 mV: ' num2str(I_d_tot, '%.2e') ' A']);
 
 %% 5: Stochastic, voltage dependent ion channels
-%Task 12:
+% Task 12:
+V_m = (-80:10:80)*1e-3;
+m_inf = zeros(size(V_m));
+tau_m_inf = zeros(size(V_m));
+
+for i = 1:length(V_m)
+    a_m = alpha_m(V_m(i));
+    b_m = beta_m(V_m(i));
+    m_inf(i) = a_m / (a_m + b_m);
+    tau_m_inf(i) = 1 / (a_m + b_m);
+end
+
+figure;
+plot(V_m*1e3, m_inf);
+xlabel('V_m [mV]');
+ylabel('m_{\infty} coefficient');
+ylim([-0.1 1.1]);
+title('m_{\infty} vs V');
+
+figure;
+plot(V_m*1e3, tau_m_inf);
+xlabel('V_m [mV]');
+ylabel('\tau_{m_{\infty}} coefficient');
+title('\tau_{m_{\infty}} vs V');
+
+% Task 13:
+s_m = zeros(length(V_m),length(time)); % State of the Na-m channel (open or close)
+
+for i = 1:length(V_m)
+    a = alpha_m(V_m(i));
+    b = beta_m(V_m(i));
+
+    s_m(i,1) = rand() < m_inf(i);
+
+    for j = 1:length(time)-1
+        s_m(i,j+1) = next_state(s_m(i,j),a,b,dt);
+    end
+end
+
+figure;
+hold on;
+for i = 1:length(V_m)
+    plot(time*1e3, s_m(i,:));  % Time in ms, state 0 or 1
+end
+xlabel('Time [ms]');
+ylabel('Na-m channel state (0=closed, 1=open)');
+ylim([-0.1 1.1]);
+title('Stochastic Na-m channel state vs time');
+legend(arrayfun(@(V) sprintf('Vm = %.0f mV', V*1e3), V_m, 'UniformOutput', false));
+hold off;
+
+for i = 1:length(V_m)
+    figure;
+    plot(time*1e3, s_m(i,:));  % Time in ms, state 0 or 1
+    xlabel('Time [ms]');
+    ylabel(' Na-m channel state (0=closed, 1=open)');
+    ylim([-0.1 1.1]);
+    title(sprintf('Stochastic Na-m channel state at Vm = %.0f mV', V_m(i)*1e3));
+end
+
+% Task 14:
+s_m1 = zeros(length(V_m), length(time)); % State of the first Na-m channel (open or close)
+s_m2 = zeros(length(V_m), length(time)); % State of the second Na-m channel (open or close)
+s_m3 = zeros(length(V_m), length(time)); % State of the third Na-m channel (open or close)
+s_h = zeros(length(V_m),length(time)); % State of the Na-h channel (open or close)
+s = zeros(length(V_m),length(time)); % State of the m^3h sodium channel (open or close)
+
+for i = 1:length(V_m)
+    a_m = alpha_m(V_m(i));
+    b_m = beta_m(V_m(i));
+    a_h = alpha_h(V_m(i));
+    b_h = beta_h(V_m(i));
+
+    s_m1(i,1) = rand() < m_inf(i);
+    s_m2(i,1) = rand() < m_inf(i);
+    s_m3(i,1) = rand() < m_inf(i);
+    s_h(i,1) = rand() < a_h/(a_h + b_h);
+    s(i,1) = (s_m(i,1)^3)*s_h(i,1);
+
+    for j = 1:length(time)-1
+        s_m1(i,j+1) = next_state(s_m1(i,j),a_m,b_m,dt);
+        s_m2(i,j+1) = next_state(s_m2(i,j),a_m,b_m,dt);
+        s_m3(i,j+1) = next_state(s_m3(i,j),a_m,b_m,dt);
+        s_h(i,j+1) = next_state(s_h(i,j),a_h,b_h,dt);
+        s(i,j+1) = s_m1(i,j+1)*s_m2(i,j+1)*s_m3(i,j+1)*s_h(i,j+1);
+    end
+end
+
+figure;
+hold on;
+for i = 1:length(V_m)
+    plot(time*1e3, s(i,:));  % Time in ms, state 0 or 1
+end
+xlabel('Time [ms]');
+ylabel('Na (m^3h) channel state (0=closed, 1=open)');
+ylim([-0.1 1.1]);
+title('Stochastic Na (m^3h) channel state vs time');
+legend(arrayfun(@(V) sprintf('Vm = %.0f mV', V*1e3), V_m, 'UniformOutput', false));
+hold off;
+
+for i = 1:length(V_m)
+    figure;
+    plot(time*1e3, s(i,:));  % Time in ms, state 0 or 1
+    xlabel('Time [ms]');
+    ylabel(' Na (m^3h) channel state (0=closed, 1=open)');
+    ylim([-0.1 1.1]);
+    title(sprintf('Stochastic Na (m^3h) channel state at Vm = %.0f mV', V_m(i)*1e3));
+end
+
+%% Functions
+
+function V_rest = GHK_voltage(R, F, T, IonTable)
+%GHK_VOLTAGE Compute resting potential using the GHK equation
+%
+%   V_rest = GHK_voltage(R, F, T, IonTable)
+%
+% Inputs:
+%   R        - Gas constant [J/(K*mol)]
+%   F        - Faraday constant [C/mol]
+%   T        - Temperature [K]
+%   IonTable - Table with row names {'K+','Na+','Cl-'} 
+%              and variables: P, C_in, C_out
+%
+% Output:
+%   V_rest   - Membrane potential [V]
+
+    % Numerator (note Cl- uses C_in)
+    num = IonTable{'K+','P'}  * IonTable{'K+','C_out'} + ...
+          IonTable{'Na+','P'} * IonTable{'Na+','C_out'} + ...
+          IonTable{'Cl-','P'} * IonTable{'Cl-','C_in'};
+
+    % Denominator (note Cl- uses C_out)
+    den = IonTable{'K+','P'}  * IonTable{'K+','C_in'} + ...
+          IonTable{'Na+','P'} * IonTable{'Na+','C_in'} + ...
+          IonTable{'Cl-','P'} * IonTable{'Cl-','C_out'};
+
+    % GHK equation
+    V_rest = (R*T/F) * log(num/den);
+end
+
+function I = GHK_current(R, F, T, V, IonTable)
+%GHK_CURRENT Compute ionic current using GHK equation
+%
+%   I = GHK_current(R, F, T, V, IonTable)
+%
+% Inputs:
+%   R        - Gas constant [J/(K*mol)]
+%   F        - Faraday constant [C/mol]
+%   T        - Temperature [K]
+%   V        - Membrane potential [V]
+%   IonTable - Table with row names {'K+','Na+','Cl-'}
+%              and variables: P, C_in, C_out, z
+%
+% Output:
+%   I        - Ionic current density [A/m^2] for each ion
+%              (total current in Amperes = I * membrane area)
+
+    % Extract table variables
+    P     = IonTable.P;
+    C_in  = IonTable.C_in;
+    C_out = IonTable.C_out;
+    z     = IonTable.z;
+
+    % Dimensionless factor
+    csi = z .* V * F / (R*T);
+
+    % GHK equation
+    I = zeros(height(IonTable));
+    
+    if V == 0
+        I = P .* z .* F .* (C_in - C_out);
+    else
+        I = P .* z .* F .* csi .* ((C_in - C_out .* exp(-csi)) ./ (1 - exp(-csi)));
+    end
+end
+
+function alpha_m = alpha_m(V)
+%ALPHA Compute alpha_m value
+%
+%   alpha_m = alpha_m(V)
+%
+% Inputs:
+%   V        - Membrane potential [V]
+%
+% Output:
+%   alpha_m  - rate coefficient
+
+    if V == -0.035
+        alpha_m = 1e3;
+    else
+        alpha_m = -(V + 0.035)*1e5/(exp(-(V + 0.035)*1e2)-1);
+    end
+end
+
+function beta_m = beta_m(V)
+%ALPHA Compute beta_m value
+%
+%   beta_m = beta_m(V)
+%
+% Inputs:
+%   V        - Membrane potential [V]
+%
+% Output:
+%   beta_m   - rate coefficient
+
+    beta_m = exp(-(V + 0.060)/0.018)*4e3;
+end
+
+function next_state = next_state(state,alpha,beta,dt)
+    nch = size(state,2);
+    p01 = rand(1,nch);
+    alphadt = repmat(alpha,1,nch)*dt;
+    betadt = repmat(beta,1,nch)*dt;
+    next_state1 = (p01<alphadt) .* (state==0);
+    next_state0 = (p01<betadt) .* (state==1);
+    next_state = state + next_state1 - next_state0;
+end
+
+function alpha_h = alpha_h(V)
+%ALPHA Compute alpha_h value
+%
+%   alpha_m = alpha_h(V)
+%
+% Inputs:
+%   V        - Membrane potential [V]
+%
+% Output:
+%   alpha_h  - rate coefficient
+
+    alpha_h = 12*exp(-V/0.020);
+end
+
+function beta_h = beta_h(V)
+%ALPHA Compute beta_h value
+%
+%   beta_m = beta_h(V)
+%
+% Inputs:
+%   V        - Membrane potential [V]
+%
+% Output:
+%   beta_h   - rate coefficient
+
+    beta_h = 180/(exp(-(V + 0.030)*1e2) + 1);
+end
