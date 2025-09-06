@@ -1,3 +1,10 @@
+% rng('shuffle');
+% s = rng;
+% save('rng_seed_new.mat','s');
+
+load("rng_seed.mat",'s');
+rng(s);
+
 %% Values and tables
 R = 8.314; % Gas constant, in Joule/(Kelvin*mol)
 F = 96480; % Faradays constant, in Coulomb/mol
@@ -13,8 +20,8 @@ IonTable = table(P, C_in, C_out, z, ...
     'RowNames', Ion);
 disp(IonTable);
 
-d_s = 100*1e-9; % Diameter of a neuron soma, in m
-d_d = 1*1e-9; % Diameter of a dendritic spine head, in m
+d_s = 100*1e-6; % Diameter of a neuron soma, in m
+d_d = 1*1e-6; % Diameter of a dendritic spine head, in m
 t_m = 100; % Membrane thickness, in Angstrom
 c_m = 1e-2; % Membrane specific capacitance, in F/m^2
 v_m = -50*1e-3; % Membrane potential, in V
@@ -268,7 +275,7 @@ ylabel('Membrane potential [mV]');
 title('V_m course for soma with changing ion permeabilities (I_{inj} = 0)');
 
 % Task 11:
-A_d = 4*pi*(d_d/2)^2; % Area of soma membrane, in m^2
+A_d = 4*pi*(d_d/2)^2; % Area of dendritic spine head membrane, in m^2
 I_d = I_d_s * A_d; % Current, in A
 I_d_table = table(I_d, 'RowNames', IonTable.Properties.RowNames, ...
     'VariableNames', {'Current in A'});
@@ -387,8 +394,113 @@ for i = 1:length(V_m)
     title(sprintf('Stochastic Na (m^3h) channel state at Vm = %.0f mV', V_m(i)*1e3));
 end
 
-%% Functions
+%% 6 Voluntary exercise
+Na_ch = 30;
+g_Na_max = 1e-12; % Max conductance for each Na channel, in S
+E_Na = - (R*T/F) * log(IonTable{'Na+', 'C_out'}/IonTable{'Na+', 'C_in'});
+C_m = c_m*A_d; % Example membrane capacitance in F
+V_ch = -0.070 * ones(size(time)); % Initial Vm in V, e.g., -70 mV
+V_leak = -0.070 * ones(size(time)); % Initial Vm in V, e.g., -70 mV
+a_m_init = alpha_m(V_ch(1));
+b_m_init = beta_m(V_ch(1));
+a_h_init = alpha_h(V_ch(1));
+b_h_init = beta_h(V_ch(1));
+m_init = a_m_init / (a_m_init + b_m_init);
+h_init = a_h_init / (a_h_init + b_h_init);
 
+P = IonTable.P;
+C_in  = IonTable.C_in;
+C_out = IonTable.C_out;
+z = IonTable.z;
+
+I_Na = zeros(Na_ch,length(time));
+I_Na_tot = zeros(size(time));
+I_tot = zeros(size(time));
+I_leak = zeros(size(time));
+I_leak_inj = zeros(size(time));
+I_inj = zeros(size(time));
+
+s_m = zeros(3, Na_ch, length(time));
+s_h = zeros(Na_ch, length(time));
+s_ch = zeros(Na_ch, length(time));
+
+% Initialize channel states
+for ch = 1:Na_ch
+    s_m(:,ch,1) = rand(3,1) < m_init;
+    s_h(ch,1) = rand() < h_init;
+
+    s_ch(ch,1) = prod(s_m(:,ch,1)) * s_h(ch,1);
+    I_Na(ch,1) = g_Na_max * s_ch(ch,1) * (V_ch(1) - E_Na);
+end
+
+I_Na_tot(1) = sum(I_Na(ch,1));
+
+I_leak(1) = - sum(GHK_current(R,F,T,V_ch(1),IonTable)) * A_d;
+I_leak_inj(1) = I_leak(1);
+I_tot(1) = I_leak(1) + I_Na_tot(1);
+
+for j = 1:length(time)-1
+    V_ch(j+1) = V_ch(j) + (I_tot(j)/C_m) * dt;
+    V_leak(j+1) = V_leak(j) + (I_leak_inj(j)/C_m) * dt;
+
+    for ch = 1:Na_ch
+        for m = 1:3
+            s_m(m,ch,j+1) = next_state(s_m(m,ch,j), alpha_m(V_ch(j)), beta_m(V_ch(j)), dt);
+        end
+        s_h(ch,j+1) = next_state(s_h(ch,j), alpha_h(V_ch(j)), beta_h(V_ch(j)), dt);
+
+        s_ch(ch,j+1) = prod(s_m(:,ch,j+1)) * s_h(ch,j+1);
+
+        I_Na(ch,j+1) = g_Na_max * s_ch(ch,j+1) * (V_ch(j) - E_Na);
+    end
+
+    if (0.010 <= time(j+1) ) && (time(j+1) <= 0.015)
+        I_inj(j+1) = 4e-13;
+    else
+        I_inj(j+1) = 0;
+    end
+
+    I_Na_tot(j+1) = sum(I_Na(:,j+1),1);
+
+    I_l1 = - GHK_current(R,F,T,V_leak(j+1),IonTable);
+    I_l2 = - GHK_current(R,F,T,V_ch(j+1),IonTable);
+
+    I_leak(j+1) = sum(I_l2) * A_d;
+
+    I_leak_inj(j+1) = sum(I_l1) * A_d + I_inj(j+1);
+    I_tot(j+1) = I_leak(j+1) + I_Na_tot(j+1) + I_inj(j+1);
+end
+
+figure;
+subplot(2,1,1);
+plot(time*1e3, V_ch*1e3, 'LineWidth', 1.5);
+xlabel('Time [ms]');
+ylabel('V_{ch} [mV]');
+title('V_{ch} vs time');
+grid on;
+subplot(2,1,2);
+plot(time*1e3, V_leak*1e3, 'LineWidth', 1.5);
+xlabel('Time [ms]');
+ylabel('V_{leak} [mV]');
+title('V_{leak} vs time');
+grid on;
+sgtitle('Membrane potential with and without stochastic Na channels');
+
+figure;
+plot(time*1e3, I_Na_tot*1e12, 'LineWidth', 1.5);
+xlabel('Time [ms]');
+ylabel('Na current [pA]');
+title('Sodium current (I_{Na})');
+grid on;
+
+figure;
+plot(time*1e3, I_leak*1e12, 'LineWidth', 1.5);
+xlabel('Time [ms]');
+ylabel('Leak current [pA]');
+title('Leak current (I_{leak})');
+grid on;
+
+%% Functions
 function V_rest = GHK_voltage(R, F, T, IonTable)
 %GHK_VOLTAGE Compute resting potential using the GHK equation
 %
