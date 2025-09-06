@@ -1,8 +1,10 @@
 % rng('shuffle');
 % s = rng;
-% save('rng_seed_new.mat','s');
+% save('rng_seed_new2.mat','s');
 
-load("rng_seed.mat",'s');
+% load("rng_seed.mat",'s');
+% rng(s);
+load("rng_seed_new.mat",'s');
 rng(s);
 
 %% Values and tables
@@ -395,7 +397,8 @@ for i = 1:length(V_m)
 end
 
 %% 6 Voluntary exercise
-Na_ch = 30;
+%Na_ch = 30;
+Na_ch_vec = 0:10:30;
 g_Na_max = 1e-12; % Max conductance for each Na channel, in S
 E_Na = - (R*T/F) * log(IonTable{'Na+', 'C_out'}/IonTable{'Na+', 'C_in'});
 C_m = c_m*A_d; % Example membrane capacitance in F
@@ -408,97 +411,115 @@ b_h_init = beta_h(V_ch(1));
 m_init = a_m_init / (a_m_init + b_m_init);
 h_init = a_h_init / (a_h_init + b_h_init);
 
-P = IonTable.P;
-C_in  = IonTable.C_in;
-C_out = IonTable.C_out;
-z = IonTable.z;
+figure; hold on;
 
-I_Na = zeros(Na_ch,length(time));
-I_Na_tot = zeros(size(time));
-I_tot = zeros(size(time));
-I_leak = zeros(size(time));
-I_leak_inj = zeros(size(time));
-I_inj = zeros(size(time));
-
-s_m = zeros(3, Na_ch, length(time));
-s_h = zeros(Na_ch, length(time));
-s_ch = zeros(Na_ch, length(time));
-
-% Initialize channel states
-for ch = 1:Na_ch
-    s_m(:,ch,1) = rand(3,1) < m_init;
-    s_h(ch,1) = rand() < h_init;
-
-    s_ch(ch,1) = prod(s_m(:,ch,1)) * s_h(ch,1);
-    I_Na(ch,1) = g_Na_max * s_ch(ch,1) * (V_ch(1) - E_Na);
-end
-
-I_Na_tot(1) = sum(I_Na(ch,1));
-
-I_leak(1) = - sum(GHK_current(R,F,T,V_ch(1),IonTable)) * A_d;
-I_leak_inj(1) = I_leak(1);
-I_tot(1) = I_leak(1) + I_Na_tot(1);
-
-for j = 1:length(time)-1
-    V_ch(j+1) = V_ch(j) + (I_tot(j)/C_m) * dt;
-    V_leak(j+1) = V_leak(j) + (I_leak_inj(j)/C_m) * dt;
-
+for Na_ch = Na_ch_vec
+    I_Na = zeros(Na_ch,length(time));
+    I_Na_tot = zeros(size(time));
+    I_tot = zeros(size(time));
+    I_leak = zeros(size(time));
+    I_leak_inj = zeros(size(time));
+    I_inj = zeros(size(time));
+    
+    s_m = zeros(3, Na_ch, length(time));
+    s_h = zeros(Na_ch, length(time));
+    s_ch = zeros(Na_ch, length(time));
+    
+    % Initialize channel states
     for ch = 1:Na_ch
-        for m = 1:3
-            s_m(m,ch,j+1) = next_state(s_m(m,ch,j), alpha_m(V_ch(j)), beta_m(V_ch(j)), dt);
+        s_m(:,ch,1) = rand(3,1) < m_init;
+        s_h(ch,1) = rand() < h_init;
+    
+        s_ch(ch,1) = prod(s_m(:,ch,1)) * s_h(ch,1);
+        I_Na(ch,1) = g_Na_max * s_ch(ch,1) * (V_ch(1) - E_Na);
+    end
+    
+    I_Na_tot(1) = sum(I_Na(ch,1));
+    
+    I_leak(1) = - sum(GHK_current(R,F,T,V_ch(1),IonTable)) * A_d;
+    I_leak_inj(1) = I_leak(1);
+    I_tot(1) = I_leak(1) + I_Na_tot(1);
+    
+    for j = 1:length(time)-1
+
+        % Comment out next 4 lines for constant permeabilities
+        IonTable_temp = IonTable;   % Make a copy
+        if (Na_ch == 30) && (0.020 <= time(j+1) ) && (time(j+1) <= 0.025)
+            IonTable_temp{'K+','P'} = 4.00*1e-8;
         end
-        s_h(ch,j+1) = next_state(s_h(ch,j), alpha_h(V_ch(j)), beta_h(V_ch(j)), dt);
 
-        s_ch(ch,j+1) = prod(s_m(:,ch,j+1)) * s_h(ch,j+1);
-
-        I_Na(ch,j+1) = g_Na_max * s_ch(ch,j+1) * (V_ch(j) - E_Na);
+        V_ch(j+1) = V_ch(j) + (I_tot(j)/C_m) * dt;
+        V_leak(j+1) = V_leak(j) + (I_leak_inj(j)/C_m) * dt;
+    
+        for ch = 1:Na_ch
+            for m = 1:3
+                s_m(m,ch,j+1) = next_state(s_m(m,ch,j), alpha_m(V_ch(j)), beta_m(V_ch(j)), dt);
+            end
+            s_h(ch,j+1) = next_state(s_h(ch,j), alpha_h(V_ch(j)), beta_h(V_ch(j)), dt);
+    
+            s_ch(ch,j+1) = prod(s_m(:,ch,j+1)) * s_h(ch,j+1);
+    
+            I_Na(ch,j+1) = g_Na_max * s_ch(ch,j+1) * (V_ch(j) - E_Na);
+        end
+    
+        if (0.010 <= time(j+1) ) && (time(j+1) <= 0.015)
+            I_inj(j+1) = 4e-13;
+            %I_inj(j+1) = 1e-13; Minimal no spike
+        else
+            I_inj(j+1) = 0;
+        end
+    
+        I_Na_tot(j+1) = sum(I_Na(:,j+1),1);
+    
+        I_l1 = - GHK_current(R,F,T,V_leak(j+1),IonTable_temp);
+        I_l2 = - GHK_current(R,F,T,V_ch(j+1),IonTable_temp);
+    
+        I_leak(j+1) = sum(I_l2) * A_d;
+    
+        I_leak_inj(j+1) = sum(I_l1) * A_d + I_inj(j+1);
+        I_tot(j+1) = I_leak(j+1) + I_Na_tot(j+1) + I_inj(j+1);
     end
+    
+    plot(time*1e3, V_ch*1e3, 'LineWidth', 1.5, 'DisplayName', ...
+        ['Na\_ch = ' num2str(Na_ch)]);
 
-    if (0.010 <= time(j+1) ) && (time(j+1) <= 0.015)
-        I_inj(j+1) = 4e-13;
-    else
-        I_inj(j+1) = 0;
+    if Na_ch == 30
+        figure;
+        subplot(2,1,1);
+        plot(time*1e3, V_ch*1e3, 'LineWidth', 1.5);
+        xlabel('Time [ms]');
+        ylabel('V_{ch} [mV]');
+        title('V_{ch} vs time');
+        grid on;
+        subplot(2,1,2);
+        plot(time*1e3, V_leak*1e3, 'LineWidth', 1.5);
+        xlabel('Time [ms]');
+        ylabel('V_{leak} [mV]');
+        title('V_{leak} vs time');
+        grid on;
+        sgtitle('Membrane potential with and without stochastic Na channels');
+
+        figure;
+        plot(time*1e3, I_Na_tot*1e12, 'LineWidth', 1.5);
+        xlabel('Time [ms]');
+        ylabel('Na current [pA]');
+        title('Sodium current (I_{Na})');
+        grid on;
+
+        figure;
+        plot(time*1e3, I_leak*1e12, 'LineWidth', 1.5);
+        xlabel('Time [ms]');
+        ylabel('Leak current [pA]');
+        title('Leak current (I_{leak})');
+        grid on;
     end
-
-    I_Na_tot(j+1) = sum(I_Na(:,j+1),1);
-
-    I_l1 = - GHK_current(R,F,T,V_leak(j+1),IonTable);
-    I_l2 = - GHK_current(R,F,T,V_ch(j+1),IonTable);
-
-    I_leak(j+1) = sum(I_l2) * A_d;
-
-    I_leak_inj(j+1) = sum(I_l1) * A_d + I_inj(j+1);
-    I_tot(j+1) = I_leak(j+1) + I_Na_tot(j+1) + I_inj(j+1);
 end
 
-figure;
-subplot(2,1,1);
-plot(time*1e3, V_ch*1e3, 'LineWidth', 1.5);
 xlabel('Time [ms]');
 ylabel('V_{ch} [mV]');
-title('V_{ch} vs time');
+title('Membrane potential for different Na channel counts');
 grid on;
-subplot(2,1,2);
-plot(time*1e3, V_leak*1e3, 'LineWidth', 1.5);
-xlabel('Time [ms]');
-ylabel('V_{leak} [mV]');
-title('V_{leak} vs time');
-grid on;
-sgtitle('Membrane potential with and without stochastic Na channels');
-
-figure;
-plot(time*1e3, I_Na_tot*1e12, 'LineWidth', 1.5);
-xlabel('Time [ms]');
-ylabel('Na current [pA]');
-title('Sodium current (I_{Na})');
-grid on;
-
-figure;
-plot(time*1e3, I_leak*1e12, 'LineWidth', 1.5);
-xlabel('Time [ms]');
-ylabel('Leak current [pA]');
-title('Leak current (I_{leak})');
-grid on;
+hold off;
 
 %% Functions
 function V_rest = GHK_voltage(R, F, T, IonTable)
