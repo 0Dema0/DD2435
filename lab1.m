@@ -1,10 +1,10 @@
 % rng('shuffle');
 % s = rng;
-% save('rng_seed_new2.mat','s');
+% save('rng_seed_new3.mat','s');
 
 % load("rng_seed.mat",'s');
 % rng(s);
-load("rng_seed_new.mat",'s');
+load("rng_seed_new2.mat",'s');
 rng(s);
 
 %% Values and tables
@@ -245,16 +245,16 @@ V_m(1) = -50e-3;
 
 for i = 1:length(time)-1
     IonTable_temp = IonTable;   % Make a copy
-    if (0 <= i) && (i < 11) % From 0.000 to 0.010 seconds
+    if (0 <= time(i)) && (time(i) < 0.010) % From 0.000 to 0.010 seconds
         IonTable_temp{'K+','P'} = 4.00*1e-9;
         IonTable_temp{'Na+','P'} = 0.12*1e-9;
-    elseif (11 <= i) && (i < 16) % From 0.010 to 0.015 seconds
+    elseif (0.010 <= time(i)) && (time(i) < 0.015) % From 0.010 to 0.015 seconds
         IonTable_temp{'K+','P'} = 4.00*1e-9;
         IonTable_temp{'Na+','P'} = 6.00*1e-9;
-    elseif (16 <= i) && (i < 26) % From 0.015 to 0.025 seconds
+    elseif (0.015 <= time(i)) && (time(i) < 0.025) % From 0.015 to 0.025 seconds
         IonTable_temp{'K+','P'} = 4.00*1e-9;
         IonTable_temp{'Na+','P'} = 0.12*1e-9;
-    elseif (26 <= i) && (i < 31) % From 0.025 to 0.030 seconds
+    elseif (0.025 <= time(i)) && (time(i) < 0.030) % From 0.025 to 0.030 seconds
         IonTable_temp{'K+','P'} = 40.0*1e-9;
         IonTable_temp{'Na+','P'} = 0.12*1e-9;
     else % From 0.030 onward
@@ -291,26 +291,53 @@ disp(['Total current through neuron dendritic spine head membrane at V = -50 mV:
 V_m = (-80:10:80)*1e-3;
 m_inf = zeros(size(V_m));
 tau_m_inf = zeros(size(V_m));
+h_inf = zeros(size(V_m));
+tau_h_inf = zeros(size(V_m));
 
 for i = 1:length(V_m)
     a_m = alpha_m(V_m(i));
     b_m = beta_m(V_m(i));
     m_inf(i) = a_m / (a_m + b_m);
     tau_m_inf(i) = 1 / (a_m + b_m);
+    a_h = alpha_h(V_m(i));
+    b_h = beta_h(V_m(i));
+    h_inf(i) = a_h / (a_h + b_h);
+    tau_h_inf(i) = 1 / (a_h + b_h);
 end
 
 figure;
+
+% Top-left: m_inf
+subplot(2,2,1);
 plot(V_m*1e3, m_inf);
 xlabel('V_m [mV]');
 ylabel('m_{\infty} coefficient');
 ylim([-0.1 1.1]);
 title('m_{\infty} vs V');
 
-figure;
+% Top-right: tau_m_inf
+subplot(2,2,2);
 plot(V_m*1e3, tau_m_inf);
 xlabel('V_m [mV]');
 ylabel('\tau_{m_{\infty}} coefficient');
 title('\tau_{m_{\infty}} vs V');
+
+% Second row, first column: h_inf
+subplot(2,2,3);
+plot(V_m*1e3, h_inf);
+xlabel('V_m [mV]');
+ylabel('h_{\infty} coefficient');
+ylim([-0.1 1.1]);
+title('h_{\infty} vs V');
+
+% Second row, second column: tau_h_inf
+subplot(2,2,4);
+plot(V_m*1e3, tau_h_inf);
+xlabel('V_m [mV]');
+ylabel('\tau_{h_{\infty}} coefficient');
+title('\tau_{h_{\infty}} vs V');
+
+sgtitle('m_{\infty} and h_{\infty} values against potential, with time constants');
 
 % Task 13:
 s_m = zeros(length(V_m),length(time)); % State of the Na-m channel (open or close)
@@ -338,14 +365,16 @@ title('Stochastic Na-m channel state vs time');
 legend(arrayfun(@(V) sprintf('Vm = %.0f mV', V*1e3), V_m, 'UniformOutput', false));
 hold off;
 
-for i = 1:length(V_m)
-    figure;
+figure;
+for i = 1:length(V_m)-1
+    subplot(4,4,i)
     plot(time*1e3, s_m(i,:));  % Time in ms, state 0 or 1
     xlabel('Time [ms]');
-    ylabel(' Na-m channel state (0=closed, 1=open)');
+    ylabel('State');
     ylim([-0.1 1.1]);
-    title(sprintf('Stochastic Na-m channel state at Vm = %.0f mV', V_m(i)*1e3));
+    title(sprintf('Vm = %.0f mV', V_m(i)*1e3));
 end
+sgtitle('Stochastic Na-m channel state at different membrane potentials');
 
 % Task 14:
 s_m1 = zeros(length(V_m), length(time)); % State of the first Na-m channel (open or close)
@@ -387,14 +416,25 @@ title('Stochastic Na (m^3h) channel state vs time');
 legend(arrayfun(@(V) sprintf('Vm = %.0f mV', V*1e3), V_m, 'UniformOutput', false));
 hold off;
 
-for i = 1:length(V_m)
-    figure;
+% for i = 1:length(V_m)
+%     figure;
+%     plot(time*1e3, s(i,:));  % Time in ms, state 0 or 1
+%     xlabel('Time [ms]');
+%     ylabel(' Na (m^3h) channel state (0=closed, 1=open)');
+%     ylim([-0.1 1.1]);
+%     title(sprintf('Stochastic Na (m^3h) channel state at Vm = %.0f mV', V_m(i)*1e3));
+% end
+
+figure;
+for i = 1:length(V_m)-1
+    subplot(4,4,i)
     plot(time*1e3, s(i,:));  % Time in ms, state 0 or 1
     xlabel('Time [ms]');
-    ylabel(' Na (m^3h) channel state (0=closed, 1=open)');
+    ylabel('State');
     ylim([-0.1 1.1]);
-    title(sprintf('Stochastic Na (m^3h) channel state at Vm = %.0f mV', V_m(i)*1e3));
+    title(sprintf('Vm = %.0f mV', V_m(i)*1e3));
 end
+sgtitle('Stochastic Na (m^3h) channel state at different membrane potentials');
 
 %% 6 Voluntary exercise
 %Na_ch = 30;
@@ -402,24 +442,24 @@ Na_ch_vec = 0:10:30;
 g_Na_max = 1e-12; % Max conductance for each Na channel, in S
 E_Na = - (R*T/F) * log(IonTable{'Na+', 'C_out'}/IonTable{'Na+', 'C_in'});
 C_m = c_m*A_d; % Example membrane capacitance in F
-V_ch = -0.070 * ones(size(time)); % Initial Vm in V, e.g., -70 mV
-V_leak = -0.070 * ones(size(time)); % Initial Vm in V, e.g., -70 mV
-a_m_init = alpha_m(V_ch(1));
-b_m_init = beta_m(V_ch(1));
-a_h_init = alpha_h(V_ch(1));
-b_h_init = beta_h(V_ch(1));
+V_ch = V_rest * ones(length(Na_ch_vec),length(time)); % Initial Vm in V, e.g., -70 mV
+V_leak = V_rest * ones(length(Na_ch_vec),length(time)); % Initial Vm in V, e.g., -70 mV
+a_m_init = alpha_m(V_ch(1,1));
+b_m_init = beta_m(V_ch(1,1));
+a_h_init = alpha_h(V_ch(1,1));
+b_h_init = beta_h(V_ch(1,1));
 m_init = a_m_init / (a_m_init + b_m_init);
 h_init = a_h_init / (a_h_init + b_h_init);
 
-figure; hold on;
+I_Na_tot = zeros(length(Na_ch_vec),length(time));
+I_tot = zeros(length(Na_ch_vec),length(time));
+I_leak = zeros(length(Na_ch_vec),length(time));
+I_leak_inj = zeros(length(Na_ch_vec),length(time));
+I_inj = zeros(length(Na_ch_vec),length(time));
+idx = 1;
 
 for Na_ch = Na_ch_vec
     I_Na = zeros(Na_ch,length(time));
-    I_Na_tot = zeros(size(time));
-    I_tot = zeros(size(time));
-    I_leak = zeros(size(time));
-    I_leak_inj = zeros(size(time));
-    I_inj = zeros(size(time));
     
     s_m = zeros(3, Na_ch, length(time));
     s_h = zeros(Na_ch, length(time));
@@ -431,95 +471,97 @@ for Na_ch = Na_ch_vec
         s_h(ch,1) = rand() < h_init;
     
         s_ch(ch,1) = prod(s_m(:,ch,1)) * s_h(ch,1);
-        I_Na(ch,1) = g_Na_max * s_ch(ch,1) * (V_ch(1) - E_Na);
+        I_Na(ch,1) = g_Na_max * s_ch(ch,1) * (V_ch(idx,1) - E_Na);
     end
     
-    I_Na_tot(1) = sum(I_Na(ch,1));
+    I_Na_tot(idx,1) = sum(I_Na(:,1));
     
-    I_leak(1) = - sum(GHK_current(R,F,T,V_ch(1),IonTable)) * A_d;
-    I_leak_inj(1) = I_leak(1);
-    I_tot(1) = I_leak(1) + I_Na_tot(1);
+    I_leak(idx,1) = - sum(GHK_current(R,F,T,V_ch(idx,1),IonTable)) * A_d;
+    I_leak_inj(idx,1) = I_leak(idx,1);
+    I_tot(idx,1) = I_leak(idx,1) + I_Na_tot(idx,1);
     
     for j = 1:length(time)-1
 
         % Comment out next 4 lines for constant permeabilities
-        IonTable_temp = IonTable;   % Make a copy
-        if (Na_ch == 30) && (0.020 <= time(j+1) ) && (time(j+1) <= 0.025)
-            IonTable_temp{'K+','P'} = 4.00*1e-8;
-        end
+        % IonTable_temp = IonTable;   % Make a copy
+        % if (Na_ch == 30) && (0.020 <= time(j+1) ) && (time(j+1) <= 0.025)
+        %     IonTable_temp{'K+','P'} = 4.00*1e-8;
+        % end
 
-        V_ch(j+1) = V_ch(j) + (I_tot(j)/C_m) * dt;
-        V_leak(j+1) = V_leak(j) + (I_leak_inj(j)/C_m) * dt;
+        V_ch(idx,j+1) = V_ch(idx,j) + (I_tot(idx,j)/C_m) * dt;
+        V_leak(idx,j+1) = V_leak(idx,j) + (I_leak_inj(idx,j)/C_m) * dt;
     
         for ch = 1:Na_ch
             for m = 1:3
-                s_m(m,ch,j+1) = next_state(s_m(m,ch,j), alpha_m(V_ch(j)), beta_m(V_ch(j)), dt);
+                s_m(m,ch,j+1) = next_state(s_m(m,ch,j), alpha_m(V_ch(idx,j)), beta_m(V_ch(idx,j)), dt);
             end
-            s_h(ch,j+1) = next_state(s_h(ch,j), alpha_h(V_ch(j)), beta_h(V_ch(j)), dt);
+            s_h(ch,j+1) = next_state(s_h(ch,j), alpha_h(V_ch(idx,j)), beta_h(V_ch(idx,j)), dt);
     
             s_ch(ch,j+1) = prod(s_m(:,ch,j+1)) * s_h(ch,j+1);
     
-            I_Na(ch,j+1) = g_Na_max * s_ch(ch,j+1) * (V_ch(j) - E_Na);
+            I_Na(ch,j+1) = g_Na_max * s_ch(ch,j+1) * (V_ch(idx,j) - E_Na);
         end
     
         if (0.010 <= time(j+1) ) && (time(j+1) <= 0.015)
-            I_inj(j+1) = 4e-13;
-            %I_inj(j+1) = 1e-13; Minimal no spike
+            %I_inj(idx,j+1) = 3.25e-13;
+            I_inj(idx,j+1) = 1.5e-13; %Minimal no spike
         else
-            I_inj(j+1) = 0;
+            I_inj(idx,j+1) = 0;
         end
     
-        I_Na_tot(j+1) = sum(I_Na(:,j+1),1);
+        I_Na_tot(idx,j+1) = sum(I_Na(:,j+1),1);
     
-        I_l1 = - GHK_current(R,F,T,V_leak(j+1),IonTable_temp);
-        I_l2 = - GHK_current(R,F,T,V_ch(j+1),IonTable_temp);
+        I_l1 = - GHK_current(R,F,T,V_leak(idx,j+1),IonTable_temp);
+        I_l2 = - GHK_current(R,F,T,V_ch(idx,j+1),IonTable_temp);
     
-        I_leak(j+1) = sum(I_l2) * A_d;
+        I_leak(idx,j+1) = sum(I_l2) * A_d;
     
-        I_leak_inj(j+1) = sum(I_l1) * A_d + I_inj(j+1);
-        I_tot(j+1) = I_leak(j+1) + I_Na_tot(j+1) + I_inj(j+1);
+        I_leak_inj(idx,j+1) = sum(I_l1) * A_d + I_inj(idx,j+1);
+        I_tot(idx,j+1) = I_leak(idx,j+1) + I_Na_tot(idx,j+1) + I_inj(idx,j+1);
     end
-    
-    plot(time*1e3, V_ch*1e3, 'LineWidth', 1.5, 'DisplayName', ...
-        ['Na\_ch = ' num2str(Na_ch)]);
-
-    if Na_ch == 30
-        figure;
-        subplot(2,1,1);
-        plot(time*1e3, V_ch*1e3, 'LineWidth', 1.5);
-        xlabel('Time [ms]');
-        ylabel('V_{ch} [mV]');
-        title('V_{ch} vs time');
-        grid on;
-        subplot(2,1,2);
-        plot(time*1e3, V_leak*1e3, 'LineWidth', 1.5);
-        xlabel('Time [ms]');
-        ylabel('V_{leak} [mV]');
-        title('V_{leak} vs time');
-        grid on;
-        sgtitle('Membrane potential with and without stochastic Na channels');
-
-        figure;
-        plot(time*1e3, I_Na_tot*1e12, 'LineWidth', 1.5);
-        xlabel('Time [ms]');
-        ylabel('Na current [pA]');
-        title('Sodium current (I_{Na})');
-        grid on;
-
-        figure;
-        plot(time*1e3, I_leak*1e12, 'LineWidth', 1.5);
-        xlabel('Time [ms]');
-        ylabel('Leak current [pA]');
-        title('Leak current (I_{leak})');
-        grid on;
-    end
+    idx = idx + 1;
 end
 
+figure; hold on;
+for i = 1:length(Na_ch_vec)
+    plot(time*1e3, V_ch(i,:)*1e3, 'LineWidth', 1.5, ...
+         'DisplayName', ['Na\_ch = ' num2str(Na_ch_vec(i))]);
+end
 xlabel('Time [ms]');
 ylabel('V_{ch} [mV]');
 title('Membrane potential for different Na channel counts');
+legend;
 grid on;
 hold off;
+
+figure;
+subplot(2,1,1);
+plot(time*1e3, V_ch(4,:)*1e3, 'LineWidth', 1.5);
+xlabel('Time [ms]');
+ylabel('V_{ch} [mV]');
+title('V_{ch} vs time');
+grid on;
+subplot(2,1,2);
+plot(time*1e3, V_leak(4,:)*1e3, 'LineWidth', 1.5);
+xlabel('Time [ms]');
+ylabel('V_{leak} [mV]');
+title('V_{leak} vs time');
+grid on;
+sgtitle('Membrane potential with and without stochastic Na channels');
+
+figure;
+plot(time*1e3, I_Na_tot(4,:)*1e12, 'LineWidth', 1.5);
+xlabel('Time [ms]');
+ylabel('Na current [pA]');
+title('Sodium current (I_{Na})');
+grid on;
+
+figure;
+plot(time*1e3, I_leak(4,:)*1e12, 'LineWidth', 1.5);
+xlabel('Time [ms]');
+ylabel('Leak current [pA]');
+title('Leak current (I_{leak})');
+grid on;
 
 %% Functions
 function V_rest = GHK_voltage(R, F, T, IonTable)
